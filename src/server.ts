@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { connectDB, closeDB } from './config/db.js';
 import { createIndexes } from './models/indexes.js';
 import { initFirebase } from './firebase/firebase.config.js';
+import { seedDefaultCategories } from './services/seed.service.js';
 import { logger } from './utils/logger.js';
 
 async function bootstrap(): Promise<void> {
@@ -10,6 +11,7 @@ async function bootstrap(): Promise<void> {
 
   const db = await connectDB();
   await createIndexes(db);
+  await seedDefaultCategories();
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
