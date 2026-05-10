@@ -305,6 +305,87 @@ All endpoints are under the prefix **`/api/v1`**. Authentication uses a Bearer t
 | POST | `/tags` | admin or editor | Body: `{ name }` — slug auto-generated |
 | DELETE | `/tags/:id` | admin | |
 
+### Articles (Phase 4)
+
+All article routes require authentication.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/articles` | journalist+ | Create draft. Body: `{ headline, summary, content, categoryId, tags?, featuredImage?, gallery?, videos?, seo?, isCommentsEnabled? }` |
+| GET | `/articles/me` | journalist+ | Paginated. Optional `?status=draft` etc. |
+| GET | `/articles/queue` | editor / admin | Paginated. Default returns `submitted` + `under_review`; optional `?status=` to narrow |
+| GET | `/articles/:id` | journalist (own) / editor / admin | Full article DTO with history |
+| PATCH | `/articles/:id` | journalist (own draft/rejected) / editor (any non-draft) / admin (any) | Any subset of fields. Slug auto-regenerates on headline change while not yet published |
+| DELETE | `/articles/:id` | journalist (own draft) / admin (any) | Soft delete |
+| POST | `/articles/:id/submit` | journalist (own) / editor / admin | `draft` or `rejected` → `submitted` |
+| POST | `/articles/:id/start-review` | editor / admin | `submitted` → `under_review` |
+| POST | `/articles/:id/approve` | editor / admin | `under_review` → `approved` |
+| POST | `/articles/:id/reject` | editor / admin | `under_review` → `rejected`. Body: `{ reason }` |
+| POST | `/articles/:id/publish` | editor / admin | `approved` → `published` (sets `publishedAt = now`, clears `scheduledAt`) |
+| POST | `/articles/:id/schedule` | editor / admin | Body: `{ scheduledAt: ISO string in future }`. Status stays `approved`; cron flips to `published` when due |
+| POST | `/articles/:id/archive` | editor / admin | `published` → `archived` |
+| POST | `/articles/:id/unarchive` | editor / admin | `archived` → `published` |
+| PATCH | `/articles/:id/flags` | editor / admin | Body: any subset of `{ isBreaking, isFeatured, isTrending }` |
+
+#### Editorial state machine
+
+```
+       (journalist)               (editor/admin)            (editor/admin)
+draft ────────────► submitted ──────────────► under_review ──────────────► approved ──► published
+  ▲                                                  │                          │            │
+  │                                                  │                          │            ▼
+  └─────── reject (any role) ◄───────────────────────┘                       schedule    archived
+                                                                              (future)       │
+                                                                                 │            ▼
+                                                                                 ▼        (unarchive)
+                                                                       cron auto-publish ── back to published
+```
+
+Every transition appends an entry to `history[]` atomically (`{ action, by, at, note? }`). System-driven transitions (cron) record `by: null`.
+
+#### Scheduled publishing
+
+`scheduler.service.ts` registers a node-cron job at `* * * * *`. Each tick calls `articleWorkflow.publishScheduledArticles()` which finds approved articles whose `scheduledAt` has passed and atomically transitions them to `published`. The user-visible `publishedAt` is set to the originally-scheduled time, not the cron-fire time.
+
+### Media (Phase 5)
+
+All media routes require authentication. The backend never receives binary data — the frontend uploads directly to Cloudinary using an unsigned upload preset and POSTs the resulting metadata here.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/media` | journalist+ | Register a single uploaded asset. Body: `{ type: 'image'\|'video'\|'audio', url, publicId, format?, bytes?, width?, height?, duration?, alt?, caption?, articleId? }`. The `url` must be a `https://res.cloudinary.com/...` URL |
+| POST | `/media/bulk` | journalist+ | Register up to 50 assets at once. Body: `{ items: [...] }`. Whole batch refused on any duplicate `publicId` |
+| GET | `/media/me` | journalist+ | Paginated. Optional `?type=`, `?articleId=`, `?unattached=true` |
+| GET | `/media/:id` | owner / admin | |
+| PATCH | `/media/:id` | owner / admin | Body: any subset of `{ alt, caption, articleId }`. Pass `articleId: null` to detach |
+| DELETE | `/media/:id` | owner / admin | Soft delete. Refuses (409) when attached to a published article |
+
+**Cloudinary URL guard:** the validator only accepts URLs matching `^https://res.cloudinary.com/<cloud>/...`. Anything else is rejected with `400 BAD_REQUEST`.
+
+**Article integration:** the `featuredImage`, `gallery`, and `videos` fields on articles continue to store inline `{ url, publicId }` objects — they don't reference media records by id. The media collection serves as the user's media library for tracking; deleting a media record does not modify any article. To prevent dangling references, deletion blocks when the asset is attached to a `published` article.
+
+### Public (Phase 6)
+
+All public endpoints are unauthenticated and return only `published`, non-deleted articles.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/public/homepage` | Composite payload: `{ breaking, topHeadlines, featured, trending, latest, categories: [{ category, articles }], videos, gallery, generatedAt }`. Cached in-memory for 30 s |
+| GET | `/public/breaking` | `isBreaking` published in the last 24 h, paginated |
+| GET | `/public/trending` | Sorted by `recentViews desc, publishedAt desc` |
+| GET | `/public/videos` | Articles where `videos[0]` exists |
+| GET | `/public/gallery` | Articles where `gallery[0]` exists |
+| GET | `/public/categories/:slug/articles` | `{ category, articles }`, paginated. 404 if category missing or inactive |
+| GET | `/public/articles/:slug` | `{ article, related: [up to 6 cards] }`. Increments `viewCount` and `recentViews` (fire-and-forget) |
+| GET | `/public/tags/:slug` | `{ tag, articles }`, paginated |
+| GET | `/public/authors/:id` | Articles by author, paginated |
+
+All list endpoints accept `?page=` and `?limit=` (default 20, max 100).
+
+**Trending counter:** every successful `GET /public/articles/:slug` fires an async `$inc { viewCount: 1, recentViews: 1 }` against the article. The counter never blocks the response. The `recentViews` value is reset to 0 nightly by the scheduler at `00:00 UTC`.
+
+**Card projection:** all public list endpoints project `content`, `history`, `gallery`, and `videos` out at the MongoDB layer (`CARD_PROJECTION`) so card responses stay small.
+
 ---
 
 ## Authentication Flow
@@ -369,6 +450,8 @@ Registered in `src/models/indexes.ts`, called from `server.ts` after DB connect.
 | `users` | `firebaseUid` unique (partial: `isDeleted=false`), `email` unique (partial: `isDeleted=false`), `role`, `createdAt` desc |
 | `categories` | `slug` unique, `order`, `isActive` |
 | `tags` | `slug` unique, `name` |
+| `articles` | `slug` unique (partial: `isDeleted=false`), `status`, `categoryId`, `authorId`, `publishedAt` desc, `scheduledAt`, `tags`, `(isBreaking, publishedAt)`, `(isFeatured, publishedAt)`, `(status, publishedAt: -1)`, `(status, recentViews: -1)`, text(`headline`+`summary`+`content`) with weights 10/5/1 |
+| `media` | `publicId` unique (partial: `isDeleted=false`), `(uploadedBy, createdAt desc)`, `articleId`, `type` |
 
 Soft-delete-aware uniqueness: re-registering after admin removes a user does not collide.
 
@@ -393,10 +476,10 @@ The full plan is in `../backend_plan.md`.
 | 1 | Foundation & MVC Skeleton | done |
 | 2 | Auth & User Management (Firebase) | done |
 | 3 | Categories & Tags | done |
-| 4 | Articles & Editorial Workflow | next |
-| 5 | Multimedia References (Cloudinary, frontend-driven) | pending |
-| 6 | Public News Endpoints (homepage, category, article, gallery, video) | pending |
-| 7 | Search System (text index + filters) | pending |
+| 4 | Articles & Editorial Workflow | done |
+| 5 | Multimedia References (Cloudinary, frontend-driven) | done |
+| 6 | Public News Endpoints (homepage, category, article, gallery, video) | done |
+| 7 | Search System (text index + filters) | next |
 | 8 | Comment System (threaded, moderation) | pending |
 | 9 | Advertisement Management | pending |
 | 10 | SEO, Sitemap, Open Graph | pending |
