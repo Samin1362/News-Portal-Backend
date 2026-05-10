@@ -26,5 +26,20 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { createdAt: -1 }, name: 'createdAt_desc' },
   ]);
 
+  // --- Phase 3: categories ---
+  const categories = db.collection(COLLECTIONS.CATEGORIES);
+  await categories.createIndexes([
+    { key: { slug: 1 }, name: 'slug_unique', unique: true },
+    { key: { order: 1 }, name: 'order_asc' },
+    { key: { isActive: 1 }, name: 'isActive_idx' },
+  ]);
+
+  // --- Phase 3: tags ---
+  const tags = db.collection(COLLECTIONS.TAGS);
+  await tags.createIndexes([
+    { key: { slug: 1 }, name: 'slug_unique', unique: true },
+    { key: { name: 1 }, name: 'name_asc' },
+  ]);
+
   logger.info('MongoDB indexes ensured');
 }
