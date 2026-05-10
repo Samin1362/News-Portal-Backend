@@ -41,5 +41,46 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { name: 1 }, name: 'name_asc' },
   ]);
 
+  // --- Phase 4: articles ---
+  const articles = db.collection(COLLECTIONS.ARTICLES);
+  await articles.createIndexes([
+    {
+      key: { slug: 1 },
+      name: 'slug_unique_active',
+      unique: true,
+      partialFilterExpression: { isDeleted: { $eq: false } },
+    },
+    { key: { status: 1 }, name: 'status_idx' },
+    { key: { categoryId: 1 }, name: 'categoryId_idx' },
+    { key: { authorId: 1 }, name: 'authorId_idx' },
+    { key: { publishedAt: -1 }, name: 'publishedAt_desc' },
+    { key: { scheduledAt: 1 }, name: 'scheduledAt_idx' },
+    { key: { tags: 1 }, name: 'tags_idx' },
+    { key: { isBreaking: 1, publishedAt: -1 }, name: 'breaking_idx' },
+    { key: { isFeatured: 1, publishedAt: -1 }, name: 'featured_idx' },
+    // Phase 6 — public read patterns
+    { key: { status: 1, publishedAt: -1 }, name: 'status_publishedAt' },
+    { key: { status: 1, recentViews: -1 }, name: 'status_trending' },
+    {
+      key: { headline: 'text', summary: 'text', content: 'text' },
+      name: 'article_text_idx',
+      weights: { headline: 10, summary: 5, content: 1 },
+    },
+  ]);
+
+  // --- Phase 5: media ---
+  const media = db.collection(COLLECTIONS.MEDIA);
+  await media.createIndexes([
+    {
+      key: { publicId: 1 },
+      name: 'publicId_unique_active',
+      unique: true,
+      partialFilterExpression: { isDeleted: { $eq: false } },
+    },
+    { key: { uploadedBy: 1, createdAt: -1 }, name: 'uploadedBy_recent' },
+    { key: { articleId: 1 }, name: 'articleId_idx' },
+    { key: { type: 1 }, name: 'type_idx' },
+  ]);
+
   logger.info('MongoDB indexes ensured');
 }

@@ -4,6 +4,7 @@ import { connectDB, closeDB } from './config/db.js';
 import { createIndexes } from './models/indexes.js';
 import { initFirebase } from './firebase/firebase.config.js';
 import { seedDefaultCategories } from './services/seed.service.js';
+import { startScheduler, stopScheduler } from './services/scheduler.service.js';
 import { logger } from './utils/logger.js';
 
 async function bootstrap(): Promise<void> {
@@ -12,6 +13,8 @@ async function bootstrap(): Promise<void> {
   const db = await connectDB();
   await createIndexes(db);
   await seedDefaultCategories();
+
+  startScheduler();
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
@@ -23,6 +26,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Shutdown signal received, closing gracefully');
+    stopScheduler();
     server.close(async () => {
       await closeDB();
       process.exit(0);
