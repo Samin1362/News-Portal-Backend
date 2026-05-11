@@ -103,3 +103,28 @@ export function toArticleFullDTO(a: WithId<ArticleDoc>): ArticleFullDTO {
 export function toArticleCardListDTO(items: WithId<ArticleDoc>[]): ArticleCardDTO[] {
   return items.map(toArticleCardDTO);
 }
+
+/** Compact suggestion shape used by /public/search/suggest. */
+export interface ArticleSuggestionDTO {
+  id: string;
+  headline: string;
+  slug: string;
+}
+
+export function toSuggestionDTO(s: {
+  _id: { toString: () => string };
+  headline: string;
+  slug: string;
+}): ArticleSuggestionDTO {
+  return {
+    id: s._id.toString(),
+    headline: s.headline,
+    slug: s.slug,
+  };
+}
+
+export function toSuggestionListDTO(
+  items: Array<{ _id: { toString: () => string }; headline: string; slug: string }>,
+): ArticleSuggestionDTO[] {
+  return items.map(toSuggestionDTO);
+}

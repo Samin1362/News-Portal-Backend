@@ -82,5 +82,14 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { type: 1 }, name: 'type_idx' },
   ]);
 
+  // --- Phase 8: comments ---
+  const comments = db.collection(COLLECTIONS.COMMENTS);
+  await comments.createIndexes([
+    { key: { articleId: 1, createdAt: -1 }, name: 'articleId_recent' },
+    { key: { parentId: 1, createdAt: 1 }, name: 'parentId_oldest' },
+    { key: { userId: 1, createdAt: -1 }, name: 'userId_recent' },
+    { key: { status: 1, createdAt: -1 }, name: 'status_recent' },
+  ]);
+
   logger.info('MongoDB indexes ensured');
 }

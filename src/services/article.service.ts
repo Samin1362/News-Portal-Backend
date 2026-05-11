@@ -206,6 +206,21 @@ export async function update(
   return updated;
 }
 
+/**
+ * Editor/admin-only toggle for an article's `isCommentsEnabled` flag.
+ * Used by `PATCH /articles/:id/comments-enabled` (Phase 8).
+ */
+export async function setCommentsEnabled(
+  id: ObjectId | string,
+  isCommentsEnabled: boolean,
+): Promise<WithId<ArticleDoc>> {
+  const article = await articleModel.findById(id);
+  if (!article) throw AppError.notFound('Article not found');
+  const updated = await articleModel.updateArticle(id, { isCommentsEnabled });
+  if (!updated) throw AppError.notFound('Article not found');
+  return updated;
+}
+
 export async function softRemove(id: ObjectId | string, actor: Actor): Promise<void> {
   const article = await articleModel.findById(id);
   if (!article) throw AppError.notFound('Article not found');

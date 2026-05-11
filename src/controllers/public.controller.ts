@@ -33,7 +33,7 @@ export async function getCategoryArticles(req: Request, res: Response): Promise<
     {
       category: result.category,
       articles: toArticleCardListDTO(result.items),
-    } as unknown as never,
+    },
     buildMeta(result.page, result.limit, result.total),
   );
 }
@@ -93,7 +93,7 @@ export async function getByTag(req: Request, res: Response): Promise<void> {
     {
       tag: toTagDTO(result.tag),
       articles: toArticleCardListDTO(result.items),
-    } as unknown as never,
+    },
     buildMeta(result.page, result.limit, result.total),
   );
 }
