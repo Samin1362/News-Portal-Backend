@@ -354,6 +354,121 @@ export async function resetRecentViews(): Promise<{ count: number }> {
   return { count: result.modifiedCount };
 }
 
+// --- Phase 7: search ---
+
+export interface SearchArticlesParams {
+  q: string;
+  categoryId?: ObjectId;
+  authorId?: ObjectId;
+  from?: Date;
+  to?: Date;
+  page: number;
+  limit: number;
+  skip: number;
+}
+
+export interface CategoryFacet {
+  categoryId: string;
+  count: number;
+}
+
+/**
+ * Full-text search over published, non-deleted articles using the
+ * `article_text_idx` registered in `models/indexes.ts`. Combines optional
+ * category/author/date filters and computes a `byCategory` facet count.
+ *
+ * Sorted by text score (desc) then publishedAt (desc).
+ */
+export async function searchArticles(params: SearchArticlesParams): Promise<{
+  items: WithId<ArticleDoc>[];
+  total: number;
+  facets: { byCategory: CategoryFacet[] };
+}> {
+  const filter: Filter<ArticleDoc> = {
+    $text: { $search: params.q },
+    status: 'published',
+    isDeleted: { $ne: true },
+  };
+  if (params.categoryId) filter.categoryId = params.categoryId;
+  if (params.authorId) filter.authorId = params.authorId;
+  if (params.from || params.to) {
+    const range: { $gte?: Date; $lte?: Date } = {};
+    if (params.from) range.$gte = params.from;
+    if (params.to) range.$lte = params.to;
+    filter.publishedAt = range;
+  }
+
+  const cursor = collection()
+    .find(filter, {
+      projection: {
+        ...CARD_PROJECTION,
+        score: { $meta: 'textScore' },
+      },
+    })
+    .sort({ score: { $meta: 'textScore' }, publishedAt: -1 })
+    .skip(params.skip)
+    .limit(params.limit);
+
+  const [items, total, facetRows] = await Promise.all([
+    cursor.toArray(),
+    collection().countDocuments(filter),
+    collection()
+      .aggregate<{ _id: ObjectId; count: number }>([
+        { $match: filter },
+        { $group: { _id: '$categoryId', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ])
+      .toArray(),
+  ]);
+
+  const byCategory = facetRows.map((row) => ({
+    categoryId: row._id.toString(),
+    count: row.count,
+  }));
+
+  return { items, total, facets: { byCategory } };
+}
+
+export interface HeadlineSuggestion {
+  _id: ObjectId;
+  headline: string;
+  slug: string;
+}
+
+/**
+ * Returns up to `limit` headlines matching `q`, sorted by text score.
+ * Used by the typeahead endpoint (`/public/search/suggest`).
+ */
+export async function suggestHeadlines(
+  q: string,
+  limit = 5,
+): Promise<HeadlineSuggestion[]> {
+  const cursor = collection()
+    .find(
+      {
+        $text: { $search: q },
+        status: 'published',
+        isDeleted: { $ne: true },
+      },
+      {
+        projection: {
+          headline: 1,
+          slug: 1,
+          score: { $meta: 'textScore' },
+        },
+      },
+    )
+    .sort({ score: { $meta: 'textScore' } })
+    .limit(limit);
+
+  const docs = await cursor.toArray();
+  return docs.map((d) => ({
+    _id: d._id,
+    headline: d.headline,
+    slug: d.slug,
+  }));
+}
+
 /** Counts non-deleted articles in a category — used by category remove. */
 export async function countByCategory(categoryId: ObjectId): Promise<number> {
   return collection().countDocuments(activeFilter({ categoryId }));

@@ -386,6 +386,47 @@ All list endpoints accept `?page=` and `?limit=` (default 20, max 100).
 
 **Card projection:** all public list endpoints project `content`, `history`, `gallery`, and `videos` out at the MongoDB layer (`CARD_PROJECTION`) so card responses stay small.
 
+### Search (Phase 7)
+
+Full-text search runs against the `article_text_idx` MongoDB text index (registered in Phase 4: `headline+summary+content` with weights 10/5/1).
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/public/search` | Required: `q` (≥ 2 chars). Optional: `categoryId`, `authorId`, `from`, `to`, `page`, `limit`. Returns `{ q, items, facets: { byCategory } }` + `meta`. Sorted by text score desc, then `publishedAt` desc |
+| GET | `/public/search/suggest` | Required: `q` (≥ 2 chars). Returns up to 5 `{ id, headline, slug }` items sorted by text score |
+
+**Date filters** accept either `YYYY-MM-DD` or full ISO 8601. The schema also enforces `from <= to`.
+
+**Facets** — `byCategory` is a `[{ categoryId, count }]` array, computed in a parallel aggregation that re-applies the same filter as the main query.
+
+### Comments (Phase 8)
+
+Comments are scoped to a published article and support a single level of replies. Status flow is `pending → approved | rejected`, governed by `COMMENTS_REQUIRE_APPROVAL` (default `false` — new comments are auto-approved).
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/articles/:id/comments` | reader+ (not comment-blocked) | Body: `{ content }`. Article must be `published` + `isCommentsEnabled` |
+| GET | `/articles/:id/comments` | public | Paginated. Each item includes the first 3 approved replies inline + `totalReplies` |
+| PATCH | `/articles/:id/comments-enabled` | editor / admin | Body: `{ isCommentsEnabled }` |
+| POST | `/comments/:id/replies` | reader+ | Body: `{ content }`. Parent must be approved; nested replies refused (400) |
+| GET | `/comments/:id/replies` | public | Paginated, sorted oldest first |
+| POST | `/comments/:id/like` | reader+ | Idempotent toggle |
+| POST | `/comments/:id/report` | reader+ | Body: `{ reason }`. 409 on duplicate report |
+| DELETE | `/comments/:id` | author only | Soft delete; decrements `commentCount` if was approved |
+| PATCH | `/comments/:id/approve` | editor / admin | |
+| PATCH | `/comments/:id/reject` | editor / admin | |
+| GET | `/admin/comments` | editor / admin | Moderation queue. Optional `?status=` (default `pending`), `?reported=true` |
+| DELETE | `/admin/comments/:id` | admin | Hard delete |
+
+**DTO shapes:**
+- Public: `{ id, articleId, parentId, content, author: { id, displayName, photoURL } \| null, likeCount, hasLiked, status, createdAt, updatedAt }`.
+- Article reads add `replies: CommentDTO[]` (max 3) and `totalReplies: number`.
+- Moderation adds `reportCount`, `reports: [{ userId, reason, at }]`.
+
+**Author enrichment** is done in one bulk lookup per request and shared across all comments/replies via a `UserMap`. Soft-deleted users render as `"[deleted user]"`.
+
+**Counter consistency** — `articles.commentCount` is incremented when a comment becomes `approved` and decremented when it leaves `approved` (reject, soft-delete by author, hard-delete by admin).
+
 ---
 
 ## Authentication Flow
@@ -452,6 +493,7 @@ Registered in `src/models/indexes.ts`, called from `server.ts` after DB connect.
 | `tags` | `slug` unique, `name` |
 | `articles` | `slug` unique (partial: `isDeleted=false`), `status`, `categoryId`, `authorId`, `publishedAt` desc, `scheduledAt`, `tags`, `(isBreaking, publishedAt)`, `(isFeatured, publishedAt)`, `(status, publishedAt: -1)`, `(status, recentViews: -1)`, text(`headline`+`summary`+`content`) with weights 10/5/1 |
 | `media` | `publicId` unique (partial: `isDeleted=false`), `(uploadedBy, createdAt desc)`, `articleId`, `type` |
+| `comments` | `(articleId, createdAt desc)`, `(parentId, createdAt asc)`, `(userId, createdAt desc)`, `(status, createdAt desc)` |
 
 Soft-delete-aware uniqueness: re-registering after admin removes a user does not collide.
 
@@ -479,9 +521,9 @@ The full plan is in `../backend_plan.md`.
 | 4 | Articles & Editorial Workflow | done |
 | 5 | Multimedia References (Cloudinary, frontend-driven) | done |
 | 6 | Public News Endpoints (homepage, category, article, gallery, video) | done |
-| 7 | Search System (text index + filters) | next |
-| 8 | Comment System (threaded, moderation) | pending |
-| 9 | Advertisement Management | pending |
+| 7 | Search System (text index + filters) | done |
+| 8 | Comment System (threaded, moderation) | done |
+| 9 | Advertisement Management | next |
 | 10 | SEO, Sitemap, Open Graph | pending |
 | 11 | Notifications & Newsletter (optional) | pending |
 | 12 | Performance, Security, Hardening | pending |

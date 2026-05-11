@@ -46,6 +46,21 @@ export async function findById(id: ObjectId | string): Promise<WithId<UserDoc> |
   return collection().findOne(activeFilter({ _id }));
 }
 
+/**
+ * Bulk lookup for user enrichment (e.g. populating comment authors).
+ * Includes soft-deleted users so their displayName/photoURL can still render
+ * on historical content. The view layer decides what to expose.
+ */
+export async function findManyByIds(
+  ids: Array<ObjectId | string>,
+): Promise<WithId<UserDoc>[]> {
+  if (ids.length === 0) return [];
+  const objectIds = ids.map((id) => (typeof id === 'string' ? new ObjectId(id) : id));
+  return collection()
+    .find({ _id: { $in: objectIds } })
+    .toArray();
+}
+
 export async function createUser(input: NewUserInput): Promise<WithId<UserDoc>> {
   const now = new Date();
   const doc: Omit<UserDoc, '_id'> = {

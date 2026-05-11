@@ -17,13 +17,13 @@ export function noContent(res: Response): Response {
 
 export function paginated<T>(
   res: Response,
-  items: T[],
+  data: T,
   meta: PaginationMeta,
   message?: string,
 ): Response {
-  const body: ApiResponse<T[]> = {
+  const body: ApiResponse<T> = {
     success: true,
-    data: items,
+    data,
     meta,
     ...(message ? { message } : {}),
   };

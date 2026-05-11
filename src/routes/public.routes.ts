@@ -17,10 +17,14 @@ import {
   getTrending,
   getVideos,
 } from '../controllers/public.controller.js';
+import searchRoutes from './search.routes.js';
 
 const router = Router();
 
 // All endpoints are public — no authentication required.
+
+// Phase 7: search and typeahead live under /public/search
+router.use('/search', searchRoutes);
 
 router.get('/homepage', asyncHandler(getHomepage));
 
