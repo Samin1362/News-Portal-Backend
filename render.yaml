@@ -1,22 +1,23 @@
 # Render Blueprint for the News Portal backend.
-# Drop this file at the repo root (or service root) and use "New from
-# Blueprint" in the Render dashboard to provision the service in one click.
+#
+# Layout assumption:
+#   The contents of this `backend/` folder are pushed to GitHub as the
+#   repository ROOT (the `package.json` lives at the repo root, not under a
+#   `backend/` subfolder). This file therefore lives at the repo root once
+#   pushed, and no `rootDir` directive is needed.
 #
 # Notes:
-#   - rootDir is set so Render runs npm commands inside ./backend even though
-#     this YAML lives at the repo root.
-#   - sync: false on every secret-bearing env var so the values must be filled
-#     in via the Render dashboard (never committed to git).
-#   - Free plan instances sleep after 15 min of inactivity. Scheduled
-#     publishing (node-cron) will pause during sleep — see backend/README.md
-#     for production trade-offs.
+#   - sync: false on every secret-bearing env var so the values must be
+#     filled in via the Render dashboard (never committed to git).
+#   - Free-plan instances sleep after 15 min of inactivity. Scheduled
+#     publishing (node-cron) pauses during sleep — see README.md for
+#     production trade-offs.
 services:
   - type: web
     name: news-portal-api
     runtime: node
     plan: free
     region: oregon
-    rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/v1/health
@@ -43,4 +44,4 @@ services:
       - key: RATE_LIMIT_GLOBAL_PER_MIN
         value: 300
       - key: COMMENTS_REQUIRE_APPROVAL
-        value: false
+        value: "false"
