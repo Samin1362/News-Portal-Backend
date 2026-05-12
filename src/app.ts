@@ -9,6 +9,7 @@ import { API_PREFIX } from './config/constants.js';
 import apiRouter from './routes/index.js';
 import { notFound } from './middlewares/notFound.middleware.js';
 import { errorHandler } from './middlewares/error.middleware.js';
+import { globalRateLimiter } from './middlewares/rateLimit.middleware.js';
 
 export function createApp(): Application {
   const app = express();
@@ -16,7 +17,44 @@ export function createApp(): Application {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
 
-  app.use(helmet());
+  // Phase 12 — security headers with CSP tuned for our third-party domains.
+  // CSP is most meaningful for HTML responses; helmet still emits it on JSON
+  // as defense-in-depth, and it costs nothing if browsers ignore it.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          objectSrc: ["'none'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+          mediaSrc: ["'self'", 'https://res.cloudinary.com'],
+          connectSrc: [
+            "'self'",
+            // Firebase Auth + Realtime channels used by the web SDK on the frontend.
+            'https://identitytoolkit.googleapis.com',
+            'https://securetoken.googleapis.com',
+            'https://firebasestorage.googleapis.com',
+            'https://*.firebaseio.com',
+            // Cloudinary upload + delivery
+            'https://api.cloudinary.com',
+            'https://res.cloudinary.com',
+          ],
+          frameSrc: [
+            "'self'",
+            'https://www.youtube.com',
+            'https://www.youtube-nocookie.com',
+            'https://player.vimeo.com',
+          ],
+          fontSrc: ["'self'", 'data:'],
+          frameAncestors: ["'none'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   app.use(
     cors({
@@ -53,6 +91,9 @@ export function createApp(): Application {
       },
     }),
   );
+
+  // Phase 12 — global rate limit applied to every /api/v1 path.
+  app.use(API_PREFIX, globalRateLimiter);
 
   app.use(API_PREFIX, apiRouter);
 

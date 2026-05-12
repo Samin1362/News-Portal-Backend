@@ -6,6 +6,7 @@ import { CARD_PROJECTION } from '../models/article.model.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../utils/logger.js';
 import { parsePagination } from '../utils/pagination.js';
+import { LRUCache } from '../utils/lruCache.js';
 import { toCategoryDTO, type CategoryDTO } from '../views/category.view.js';
 import {
   toArticleCardListDTO,
@@ -19,8 +20,12 @@ import type { PublicListQuery } from '../validators/public.validator.js';
 const HOMEPAGE_CACHE_TTL_MS = 30_000;
 const CATEGORY_BLOCK_LIMIT = 6;
 const ARTICLES_PER_CATEGORY_BLOCK = 4;
+const HOMEPAGE_CACHE_KEY = 'homepage';
 
-let homepageCache: { value: HomepageDTO; expiresAt: number } | null = null;
+const homepageCache = new LRUCache<string, HomepageDTO>({
+  maxEntries: 1,
+  defaultTTLMs: HOMEPAGE_CACHE_TTL_MS,
+});
 
 export interface HomepageCategoryBlockDTO {
   category: CategoryDTO;
@@ -127,18 +132,16 @@ async function buildHomepage(): Promise<HomepageDTO> {
 }
 
 export async function getHomepage(): Promise<HomepageDTO> {
-  const now = Date.now();
-  if (homepageCache && homepageCache.expiresAt > now) {
-    return homepageCache.value;
-  }
+  const cached = homepageCache.get(HOMEPAGE_CACHE_KEY);
+  if (cached) return cached;
   const value = await buildHomepage();
-  homepageCache = { value, expiresAt: now + HOMEPAGE_CACHE_TTL_MS };
+  homepageCache.set(HOMEPAGE_CACHE_KEY, value);
   return value;
 }
 
 /** Test/admin hook — flushes the cached homepage so the next call rebuilds it. */
 export function invalidateHomepageCache(): void {
-  homepageCache = null;
+  homepageCache.clear();
 }
 
 export async function getCategoryArticles(slug: string, query: PublicListQuery) {

@@ -435,6 +435,25 @@ export interface HeadlineSuggestion {
   slug: string;
 }
 
+export interface SitemapEntry {
+  slug: string;
+  updatedAt: Date;
+}
+
+/**
+ * Lightweight projection of every published, non-deleted article.
+ * Used to build the sitemap without fetching content/history/gallery/videos.
+ */
+export async function listAllPublishedForSitemap(): Promise<SitemapEntry[]> {
+  const docs = await collection()
+    .find(activeFilter({ status: 'published' }), {
+      projection: { _id: 0, slug: 1, updatedAt: 1 },
+    })
+    .sort({ publishedAt: -1 })
+    .toArray();
+  return docs.map((d) => ({ slug: d.slug, updatedAt: d.updatedAt }));
+}
+
 /**
  * Returns up to `limit` headlines matching `q`, sorted by text score.
  * Used by the typeahead endpoint (`/public/search/suggest`).

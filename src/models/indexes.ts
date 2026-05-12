@@ -91,5 +91,13 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { status: 1, createdAt: -1 }, name: 'status_recent' },
   ]);
 
+  // --- Phase 9: ads ---
+  const ads = db.collection(COLLECTIONS.ADS);
+  await ads.createIndexes([
+    { key: { placement: 1, isActive: 1 }, name: 'placement_isActive' },
+    { key: { startDate: 1 }, name: 'startDate_idx' },
+    { key: { endDate: 1 }, name: 'endDate_idx' },
+  ]);
+
   logger.info('MongoDB indexes ensured');
 }
