@@ -61,3 +61,19 @@ export function textResponse(
   }
   return res.status(200).send(text);
 }
+
+/**
+ * Sends an HTML payload (e.g. the API index landing page) with the right
+ * content-type and optional cache-control.
+ */
+export function htmlResponse(
+  res: Response,
+  html: string,
+  cacheSeconds = 0,
+): Response {
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  if (cacheSeconds > 0) {
+    res.set('Cache-Control', `public, max-age=${cacheSeconds}`);
+  }
+  return res.status(200).send(html);
+}
