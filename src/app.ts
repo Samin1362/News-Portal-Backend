@@ -10,6 +10,7 @@ import apiRouter from './routes/index.js';
 import { notFound } from './middlewares/notFound.middleware.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { globalRateLimiter } from './middlewares/rateLimit.middleware.js';
+import { renderApiIndex } from './controllers/apiIndex.controller.js';
 
 export function createApp(): Application {
   const app = express();
@@ -91,6 +92,11 @@ export function createApp(): Application {
       },
     }),
   );
+
+  // Root landing page — lists every endpoint, intended for humans hitting
+  // the service URL in a browser. Declared BEFORE the /api/v1 mount so a
+  // GET / shortcut never hits the API router.
+  app.get('/', renderApiIndex);
 
   // Phase 12 — global rate limit applied to every /api/v1 path.
   app.use(API_PREFIX, globalRateLimiter);
