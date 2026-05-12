@@ -5,6 +5,7 @@ import * as tagService from './tag.service.js';
 import { AppError } from '../utils/AppError.js';
 import { ensureUniqueSlug, makeSlug } from '../utils/slug.js';
 import { parsePagination } from '../utils/pagination.js';
+import { sanitizeArticleHtml } from '../utils/sanitize.js';
 import { env } from '../config/env.js';
 import type {
   ArticleDoc,
@@ -99,7 +100,7 @@ export async function createDraft(
       headline: body.headline,
       slug,
       summary: body.summary,
-      content: body.content,
+      content: sanitizeArticleHtml(body.content),
       authorId: ownerObjectId(actor),
       categoryId: body.categoryId,
       tags: tagSlugs,
@@ -162,7 +163,7 @@ export async function update(
   const patch: Partial<ArticleDoc> = {};
   if (body.headline !== undefined) patch.headline = body.headline;
   if (body.summary !== undefined) patch.summary = body.summary;
-  if (body.content !== undefined) patch.content = body.content;
+  if (body.content !== undefined) patch.content = sanitizeArticleHtml(body.content);
   if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
   if (body.featuredImage !== undefined) patch.featuredImage = body.featuredImage;
   if (body.gallery !== undefined) patch.gallery = body.gallery;

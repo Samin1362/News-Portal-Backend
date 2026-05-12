@@ -427,6 +427,109 @@ Comments are scoped to a published article and support a single level of replies
 
 **Counter consistency** — `articles.commentCount` is incremented when a comment becomes `approved` and decremented when it leaves `approved` (reject, soft-delete by author, hard-delete by admin).
 
+### Ads (Phase 9)
+
+Frontend uploads the banner image to Cloudinary first, then posts the resulting metadata here (same pattern as Phase 5 media). The backend stores only the strings.
+
+Placements: `home_top`, `home_sidebar`, `home_bottom`, `article_inline`, `article_sidebar`, `sponsored_post`.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/ads` | admin | Body: `{ name, placement, imageUrl, publicId, linkUrl, altText?, isActive?, startDate?, endDate? }`. `imageUrl` must point to `res.cloudinary.com`; `startDate <= endDate` enforced |
+| GET | `/ads` | admin | Paginated. Optional `?placement=`, `?isActive=true|false` |
+| GET | `/ads/:id` | admin | Returns full admin DTO |
+| PATCH | `/ads/:id` | admin | Any subset of fields. If image is replaced, post the new `imageUrl` + `publicId` |
+| DELETE | `/ads/:id` | admin | Soft delete |
+| GET | `/public/ads` | public | Required `?placement=`. Returns currently-eligible ads (active + within date window). Fire-and-forget impressions bump |
+| POST | `/public/ads/:id/click` | public | Returns `{ id, linkUrl }` and atomically increments `clicks` |
+
+**Eligibility for `/public/ads`**: `isDeleted !== true`, `isActive === true`, `startDate` is null or `<= now`, `endDate` is null or `>= now`.
+
+**Public DTO** hides `impressions`, `clicks`, `isActive`, `startDate`, `endDate`, `publicId`, `isDeleted`. Counters are admin-only.
+
+**Daily deactivation** — a cron job at `00:30 UTC` flips `isActive` to `false` on any ad whose `endDate` has passed, so expired ads stop appearing in public reads even if they were never manually deactivated.
+
+### SEO, Sitemap & Open Graph (Phase 10)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/public/sitemap.xml` | XML sitemap (sitemaps.org schema 0.9). Includes static URLs + every active category + every published article. 1-hour in-memory cache + `Cache-Control: public, max-age=3600` |
+| GET | `/public/robots.txt` | Plain text. `User-agent: *` + `Allow: /` + an absolute `Sitemap:` reference |
+| GET | `/public/articles/:slug/og` | JSON Open Graph payload with nested JSON-LD `NewsArticle` structured data. 404 when article is missing or not yet `published` |
+
+**Open Graph payload** shape (under `data`):
+
+```jsonc
+{
+  "title": "...",                  // seo.title || headline
+  "description": "...",            // seo.description || summary
+  "url": "<canonical>",            // seo.canonicalUrl || PUBLIC_BASE_URL/articles/<slug>
+  "image": "<og image url>",       // seo.ogImage || featuredImage.url || null
+  "type": "article",
+  "siteName": "News Portal",
+  "publishedTime": "<ISO>",
+  "modifiedTime": "<ISO>",
+  "author": "Display Name",
+  "section": "Politics",
+  "tags": ["election", "policy"],
+  "structuredData": {              // schema.org NewsArticle (JSON-LD)
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    "headline": "...",
+    "description": "...",
+    "image": ["<og image>"],
+    "datePublished": "<ISO>",
+    "dateModified": "<ISO>",
+    "author": { "@type": "Person", "name": "..." },
+    "publisher": { "@type": "Organization", "name": "News Portal" },
+    "mainEntityOfPage": "<canonical>",
+    "keywords": "election, policy",
+    "articleSection": "Politics"
+  }
+}
+```
+
+The frontend can drop the `structuredData` block straight into a `<script type="application/ld+json">` tag and use the flat OG fields to populate `<meta property="og:*">` and `<meta name="twitter:*">` tags. Both the canonical URL and the OG image fall back through the article's `seo.*` fields → article fields → null.
+
+---
+
+## Security & Hardening (Phase 12)
+
+### Headers (helmet)
+
+Every response includes:
+- `Content-Security-Policy` with allow-lists for Cloudinary, Firebase (Auth/Storage/Realtime), and YouTube/Vimeo iframes. `frame-ancestors 'none'` prevents clickjacking.
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: SAMEORIGIN`
+
+### Rate Limits
+
+All limiters emit `draft-7` `RateLimit-*` headers.
+
+| Scope | Limit | Key | Notes |
+|---|---|---|---|
+| Global | `RATE_LIMIT_GLOBAL_PER_MIN` (default 300) / minute | IP | Applied on `/api/v1/*` |
+| Auth | 30 / minute | IP | Router-level on `/auth/*` |
+| Comment writes | 10 / minute | `req.user.id` (fallback IP) | Per-route on `POST /articles/:id/comments`, `POST /comments/:id/replies`, `POST /comments/:id/like`, `POST /comments/:id/report`, `DELETE /comments/:id`. Moderation actions exempt |
+
+### HTML Sanitization
+
+`utils/sanitize.ts` exposes `sanitizeArticleHtml(html)` which uses `sanitize-html` with an explicit allow-list of tags + attributes. Called from `article.service.createDraft` and `article.service.update` before persistence.
+
+- `<script>`, `style`, event handlers (`onclick`, etc.), and `javascript:` URLs are stripped.
+- `<a>` tags are rewritten to include `rel="noopener noreferrer"` and `target="_blank"`.
+- `<iframe>` is restricted to YouTube, youtube-nocookie, Vimeo player, and Cloudinary hostnames.
+- The `headline`, `summary`, and `seo.*` string fields are validated by Zod for length only — the frontend should render them as text, not innerHTML.
+
+### Caching
+
+`utils/lruCache.ts` exposes a generic `LRUCache<K, V>` with TTL + move-to-MRU on get + max-entries eviction. Currently powers:
+- `/public/homepage` — single key, 30s TTL.
+- `/public/sitemap.xml` — single key, 1h TTL.
+
+Both call sites are single-entry; the LRU plumbing is in place so multi-key caches can plug in later without refactoring.
+
 ---
 
 ## Authentication Flow
@@ -494,6 +597,7 @@ Registered in `src/models/indexes.ts`, called from `server.ts` after DB connect.
 | `articles` | `slug` unique (partial: `isDeleted=false`), `status`, `categoryId`, `authorId`, `publishedAt` desc, `scheduledAt`, `tags`, `(isBreaking, publishedAt)`, `(isFeatured, publishedAt)`, `(status, publishedAt: -1)`, `(status, recentViews: -1)`, text(`headline`+`summary`+`content`) with weights 10/5/1 |
 | `media` | `publicId` unique (partial: `isDeleted=false`), `(uploadedBy, createdAt desc)`, `articleId`, `type` |
 | `comments` | `(articleId, createdAt desc)`, `(parentId, createdAt asc)`, `(userId, createdAt desc)`, `(status, createdAt desc)` |
+| `ads` | `(placement, isActive)`, `startDate`, `endDate` |
 
 Soft-delete-aware uniqueness: re-registering after admin removes a user does not collide.
 
@@ -523,13 +627,81 @@ The full plan is in `../backend_plan.md`.
 | 6 | Public News Endpoints (homepage, category, article, gallery, video) | done |
 | 7 | Search System (text index + filters) | done |
 | 8 | Comment System (threaded, moderation) | done |
-| 9 | Advertisement Management | next |
-| 10 | SEO, Sitemap, Open Graph | pending |
-| 11 | Notifications & Newsletter (optional) | pending |
-| 12 | Performance, Security, Hardening | pending |
-| 13 | Deployment & Operations | pending |
+| 9 | Advertisement Management | done |
+| 10 | SEO, Sitemap, Open Graph | done |
+| 11 | Notifications & Newsletter (optional) | skipped |
+| 12 | Performance, Security, Hardening | done |
+| 13 | Deployment & Operations (Render) | done |
 
 Each phase is independently testable. Phases 1-4 are the critical path; the rest can ship incrementally.
+
+---
+
+## Deployment (Render)
+
+The repo ships with a Render Blueprint at `backend/render.yaml`. The backend runs as a long-lived Render Web Service — the existing `app.listen(env.PORT)` server, in-process `node-cron` schedulers, in-memory LRU caches, and module-level Mongo/Firebase singletons all work as-is.
+
+### Deploy in one click
+
+1. Push the repo to GitHub.
+2. In Render, click **New → Blueprint** and select the repo.
+3. Render reads `backend/render.yaml` and provisions a web service.
+4. Fill in the `sync: false` env vars in the Render dashboard (see table below).
+5. Trigger the first deploy.
+
+### Required env vars on Render
+
+| Key | Purpose | Notes |
+|---|---|---|
+| `NODE_ENV` | Runtime mode | `production` |
+| `PORT` | HTTP port | Render injects this automatically; the blueprint defaults to `10000` |
+| `CORS_ORIGINS` | CORS allowlist | Comma-separated. Include the frontend production origin |
+| `URI` | MongoDB Atlas connection string | `mongodb+srv://...` |
+| `DB_NAME` | Mongo database name | e.g. `news_portal` |
+| `PUBLIC_BASE_URL` | Public-facing URL | e.g. `https://news-portal-api.onrender.com`. Used in sitemap, OG canonical URLs |
+| `FIREBASE_PROJECT_ID` | Firebase Admin | Preferred: env-triple. Otherwise use Secret Files (below) |
+| `FIREBASE_CLIENT_EMAIL` | Firebase Admin | |
+| `FIREBASE_PRIVATE_KEY` | Firebase Admin | Paste the PEM with literal `\n` between lines (the env loader translates them at runtime) |
+| `RATE_LIMIT_GLOBAL_PER_MIN` | Global rate limit | Default 300 |
+| `COMMENTS_REQUIRE_APPROVAL` | Comment moderation default | Default `false` |
+
+### Firebase credentials: env-triple vs Secret File
+
+- **Env-triple (recommended on Render).** Set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` from the service-account JSON. No filesystem dependency.
+- **Secret File.** In Render dashboard → service → **Secret Files**, upload your service-account JSON. Render mounts it at `/etc/secrets/<filename>`. Set `FIREBASE_SERVICE_ACCOUNT_PATH=/etc/secrets/<filename>`.
+
+### MongoDB Atlas
+
+Whitelist either Render's outbound IP range (Render dashboard shows the current range) or `0.0.0.0/0` for simplicity. The connection string itself is the authentication boundary.
+
+### Operational caveats
+
+- **Free tier sleep.** Free Web Services sleep after 15 minutes of inactivity. While asleep, the in-process schedulers (publish-scheduled, trending reset, ad deactivation) don't run. For production use a paid plan, or extract the schedulers into HTTP endpoints triggered by Render Cron Jobs.
+- **Cold starts.** Wake-up adds ~30-60s to the first request on free tier. The frontend should use a generous timeout on the initial call.
+- **Single instance assumption.** With multiple instances, in-process cron fires on every instance and produces duplicate scheduled publishes. Stay at one instance, or migrate the schedulers to a dedicated worker / Render Cron Jobs.
+- **In-memory caches are per-instance.** The homepage and sitemap LRU caches don't share state across instances. Acceptable for the current load profile; Redis-backed cache is the upgrade path.
+
+### Verify after deploy
+
+```bash
+curl https://<your-service>.onrender.com/api/v1/health
+# → { "success": true, "data": { "status": "ok", "uptime": ..., "db": "up", "timestamp": "..." } }
+
+curl https://<your-service>.onrender.com/api/v1/categories
+# → 10 seeded categories on the first cold boot
+```
+
+The boot log on Render should show the same sequence as local:
+```
+INFO: Firebase Admin initialized
+INFO: MongoDB connected           dbName: "news_portal"
+INFO: MongoDB indexes ensured
+DEBUG: Categories already seeded; skipping     (after the first deploy)
+INFO: Article publish scheduler started (every minute)
+INFO: Trending reset scheduler started (daily at 00:00 UTC)
+INFO: Ad deactivation scheduler started (daily at 00:30 UTC)
+INFO: News Portal API listening on http://localhost:<PORT>
+```
 
 ---
 

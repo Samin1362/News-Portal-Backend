@@ -4,6 +4,7 @@ import { authenticate, optionalAuth } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/rbac.middleware.js';
 import { rejectIfBlocked } from '../middlewares/blockCheck.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
+import { commentWriteRateLimiter } from '../middlewares/rateLimit.middleware.js';
 import { objectIdParamSchema } from '../validators/common.validator.js';
 import {
   articleCommentsEnabledBodySchema,
@@ -54,6 +55,7 @@ articleCommentRouter.post(
   '/:id/comments',
   asyncHandler(authenticate),
   rejectIfBlocked,
+  commentWriteRateLimiter,
   validate({ params: objectIdParamSchema, body: createCommentBodySchema }),
   asyncHandler(createCommentOnArticle),
 );
@@ -79,11 +81,12 @@ commentRouter.get(
   asyncHandler(listReplies),
 );
 
-// Writes — reader+
+// Writes — reader+. Rate-limited to 10/min per user (Phase 12).
 commentRouter.post(
   '/:id/replies',
   asyncHandler(authenticate),
   rejectIfBlocked,
+  commentWriteRateLimiter,
   validate({ params: objectIdParamSchema, body: createCommentBodySchema }),
   asyncHandler(createReply),
 );
@@ -92,6 +95,7 @@ commentRouter.post(
   '/:id/like',
   asyncHandler(authenticate),
   rejectIfBlocked,
+  commentWriteRateLimiter,
   validate({ params: objectIdParamSchema }),
   asyncHandler(toggleLike),
 );
@@ -99,6 +103,7 @@ commentRouter.post(
 commentRouter.post(
   '/:id/report',
   asyncHandler(authenticate),
+  commentWriteRateLimiter,
   validate({ params: objectIdParamSchema, body: reportCommentBodySchema }),
   asyncHandler(reportComment),
 );
@@ -106,6 +111,7 @@ commentRouter.post(
 commentRouter.delete(
   '/:id',
   asyncHandler(authenticate),
+  commentWriteRateLimiter,
   validate({ params: objectIdParamSchema }),
   asyncHandler(deleteOwn),
 );

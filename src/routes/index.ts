@@ -12,6 +12,8 @@ import {
   articleCommentRouter,
   commentRouter,
 } from './comment.routes.js';
+import { adminAdRouter, publicAdRouter } from './ad.routes.js';
+import seoRoutes from './seo.routes.js';
 
 const router = Router();
 
@@ -31,6 +33,15 @@ router.use('/comments', commentRouter);
 router.use('/admin/comments', adminCommentRouter);
 
 router.use('/media', mediaRoutes);
+router.use('/ads', adminAdRouter);
+
+// /public/ads is mounted before /public so the more-specific prefix wins
+// even though publicRoutes would also fall through cleanly.
+router.use('/public/ads', publicAdRouter);
+// Phase 10: /public/sitemap.xml, /public/robots.txt, /public/articles/:slug/og.
+// Mounted before /public so the SEO routes are tried first; non-matching
+// paths fall through to publicRoutes.
+router.use('/public', seoRoutes);
 router.use('/public', publicRoutes);
 
 export default router;

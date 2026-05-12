@@ -31,8 +31,10 @@ const rawSchema = z.object({
   PUBLIC_BASE_URL: z.string().url().default('http://localhost:5001'),
 
   // Phase 2 — Firebase Admin. Provide either:
-  //   (a) FIREBASE_SERVICE_ACCOUNT_PATH pointing at a service-account JSON file, OR
-  //   (b) FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.
+  //   (a) FIREBASE_SERVICE_ACCOUNT_PATH — local dev, or Render Secret Files
+  //       (Render mounts uploaded secrets at /etc/secrets/<filename> by default),
+  //   (b) FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY —
+  //       preferred on hosted platforms; no filesystem dependency.
   // The firebase init helper validates that one of these is satisfied.
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
   FIREBASE_PROJECT_ID: z.string().optional(),
