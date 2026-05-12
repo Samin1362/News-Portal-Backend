@@ -639,15 +639,34 @@ Each phase is independently testable. Phases 1-4 are the critical path; the rest
 
 ## Deployment (Render)
 
-The repo ships with a Render Blueprint at `backend/render.yaml`. The backend runs as a long-lived Render Web Service — the existing `app.listen(env.PORT)` server, in-process `node-cron` schedulers, in-memory LRU caches, and module-level Mongo/Firebase singletons all work as-is.
+The backend ships with a Render Blueprint (`render.yaml`). The backend runs as a long-lived Render Web Service — the existing `app.listen(env.PORT)` server, in-process `node-cron` schedulers, in-memory LRU caches, and module-level Mongo/Firebase singletons all work as-is.
+
+### Layout assumption
+
+The contents of this `backend/` folder are pushed to GitHub as the **repository root** (so `package.json`, `src/`, `render.yaml`, etc. all live at the top level of the GitHub repo, with no `backend/` subfolder on the remote). The blueprint therefore does **not** set `rootDir` — Render runs everything from the repo root, which is correct for this layout.
+
+If your repo layout is different (the backend nested inside a `backend/` subfolder on GitHub), add `rootDir: backend` back into `render.yaml` before deploying.
 
 ### Deploy in one click
 
 1. Push the repo to GitHub.
 2. In Render, click **New → Blueprint** and select the repo.
-3. Render reads `backend/render.yaml` and provisions a web service.
+3. Render reads `render.yaml` from the repo root and provisions the web service.
 4. Fill in the `sync: false` env vars in the Render dashboard (see table below).
 5. Trigger the first deploy.
+
+### If you created the service manually (not via Blueprint)
+
+`render.yaml` is ignored when the service was created through **New → Web Service** instead of **New → Blueprint**. In that case, set these explicitly in the service's **Settings**:
+
+| Setting | Value |
+|---|---|
+| Root Directory | *(leave blank)* |
+| Build Command | `npm install && npm run build` |
+| Start Command | `npm start` |
+| Health Check Path | `/api/v1/health` |
+
+The `npm run build` step is critical — without it, `tsc` never runs and `dist/server.js` doesn't exist when `npm start` fires.
 
 ### Required env vars on Render
 
