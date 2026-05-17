@@ -157,7 +157,7 @@ router.patch(
 router.delete(
   '/:id',
   rejectIfBlocked,
-  requireRole('journalist', 'admin'),
+  requireRole('journalist', 'editor', 'admin'),
   validate({ params: objectIdParamSchema }),
   asyncHandler(remove),
 );

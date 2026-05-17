@@ -27,6 +27,10 @@ services:
         value: production
       - key: PORT
         value: 10000
+      # CORS_ORIGINS — comma-separated allowlist of every deployed frontend
+      # origin. Example value (set via the Render dashboard):
+      #   https://news-portal-editor-portal-frontend.vercel.app
+      # Add additional public / admin portal URLs here too as they ship.
       - key: CORS_ORIGINS
         sync: false
       - key: PUBLIC_BASE_URL
