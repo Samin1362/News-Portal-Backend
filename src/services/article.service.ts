@@ -226,10 +226,14 @@ export async function softRemove(id: ObjectId | string, actor: Actor): Promise<v
   const article = await articleModel.findById(id);
   if (!article) throw AppError.notFound('Article not found');
 
-  if (actor.role === 'journalist') {
-    assertJournalistOwns(article, actor);
+  if (actor.role === 'journalist' || actor.role === 'editor') {
+    // Editors author drafts via /articles too — they may only delete their
+    // own, and only while still in draft. Other states stay admin-only.
+    if (article.authorId.toString() !== actor.id) {
+      throw AppError.forbidden('You can only delete your own articles');
+    }
     if (article.status !== 'draft') {
-      throw AppError.forbidden('Journalists can only delete drafts');
+      throw AppError.forbidden('Only drafts can be deleted by their author');
     }
   }
   // admin: any state allowed

@@ -33,11 +33,12 @@ router.patch(
   asyncHandler(updateMe),
 );
 
-// Admin-only management
+// Directory reads — editors need this for the reporters desk + author lookups.
+// Write-side operations below remain admin-only.
 router.get(
   '/',
   asyncHandler(authenticate),
-  requireRole('admin'),
+  requireRole('editor', 'admin'),
   validate({ query: listUsersQuerySchema }),
   asyncHandler(listUsers),
 );
@@ -45,7 +46,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(authenticate),
-  requireRole('admin'),
+  requireRole('editor', 'admin'),
   validate({ params: objectIdParamSchema }),
   asyncHandler(getUserById),
 );

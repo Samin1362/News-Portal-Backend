@@ -69,7 +69,9 @@ export const listMineQuerySchema = paginationQuerySchema.extend({
 export type ListMineQuery = z.infer<typeof listMineQuerySchema>;
 
 export const queueQuerySchema = paginationQuerySchema.extend({
-  status: z.enum(['submitted', 'under_review']).optional(),
+  status: z
+    .enum(['submitted', 'under_review', 'approved', 'rejected', 'published'])
+    .optional(),
 });
 export type QueueQuery = z.infer<typeof queueQuerySchema>;
 
