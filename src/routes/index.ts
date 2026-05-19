@@ -14,6 +14,7 @@ import {
 } from './comment.routes.js';
 import { adminAdRouter, publicAdRouter } from './ad.routes.js';
 import seoRoutes from './seo.routes.js';
+import roleRequestRoutes from './roleRequest.routes.js';
 
 const router = Router();
 
@@ -34,6 +35,7 @@ router.use('/admin/comments', adminCommentRouter);
 
 router.use('/media', mediaRoutes);
 router.use('/ads', adminAdRouter);
+router.use('/role-requests', roleRequestRoutes);
 
 // /public/ads is mounted before /public so the more-specific prefix wins
 // even though publicRoutes would also fall through cleanly.

@@ -40,6 +40,25 @@ const rawSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
+
+  // §0a — Email + OTP infrastructure. RESEND_API_KEY is optional so the
+  // server still boots without it; email sends become a no-op + log-only
+  // when missing (handy for unit tests / CI / sandbox).
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
+  EMAIL_FROM: z.string().default('Deligo News <onboarding@resend.dev>'),
+  EMAIL_REPLY_TO: z.string().optional(),
+  OTP_EXPIRY_SECONDS: z.coerce.number().int().positive().default(600),
+  OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
+  OTP_VERIFICATION_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(900),
+  JOURNALIST_GUIDELINES_VERSION: z.string().default('v1'),
+  JOURNALIST_GUIDELINES_URL: z
+    .string()
+    .default('https://deligo.news/journalist-guidelines'),
 });
 
 const parsed = rawSchema.safeParse(process.env);

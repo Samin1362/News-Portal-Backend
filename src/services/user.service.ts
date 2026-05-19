@@ -17,6 +17,11 @@ import type {
   SetCommentBlockedBody,
   UpdateMeBody,
 } from '../validators/user.validator.js';
+import {
+  sendAccountRestoredEmail,
+  sendAccountSuspendedEmail,
+  sendRoleChangedEmail,
+} from './email.service.js';
 
 export async function getById(id: ObjectId | string): Promise<WithId<UserDoc>> {
   const user = await findById(id);
@@ -58,15 +63,47 @@ export async function listUsers(query: ListUsersQuery): Promise<{
 export async function changeRole(
   id: ObjectId | string,
   body: ChangeRoleBody,
+  actor?: { id: string; displayName: string },
 ): Promise<WithId<UserDoc>> {
-  return setField(id, { role: body.role });
+  const before = await findById(id);
+  if (!before) throw AppError.notFound('User not found');
+  const updated = await setField(id, { role: body.role });
+  if (before.role !== body.role) {
+    void sendRoleChangedEmail({
+      to: updated.email,
+      displayName: updated.displayName,
+      fromRole: before.role,
+      toRole: body.role,
+      changedBy: actor?.displayName ?? 'an administrator',
+      relatedUserId: updated._id,
+    });
+  }
+  return updated;
 }
 
 export async function setBlocked(
   id: ObjectId | string,
   body: SetBlockedBody,
 ): Promise<WithId<UserDoc>> {
-  return setField(id, { isBlocked: body.isBlocked });
+  const before = await findById(id);
+  if (!before) throw AppError.notFound('User not found');
+  const updated = await setField(id, { isBlocked: body.isBlocked });
+  if (before.isBlocked !== body.isBlocked) {
+    if (body.isBlocked) {
+      void sendAccountSuspendedEmail({
+        to: updated.email,
+        displayName: updated.displayName,
+        relatedUserId: updated._id,
+      });
+    } else {
+      void sendAccountRestoredEmail({
+        to: updated.email,
+        displayName: updated.displayName,
+        relatedUserId: updated._id,
+      });
+    }
+  }
+  return updated;
 }
 
 export async function setCommentBlocked(

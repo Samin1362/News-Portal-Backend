@@ -47,7 +47,10 @@ export async function getUserById(req: Request, res: Response): Promise<void> {
 export async function changeRole(req: Request, res: Response): Promise<void> {
   const params = requireValidated<ObjectIdParam>(req, 'params');
   const body = requireValidated<ChangeRoleBody>(req, 'body');
-  const updated = await userService.changeRole(params.id, body);
+  const actor = req.user
+    ? { id: req.user.id, displayName: req.user.displayName }
+    : undefined;
+  const updated = await userService.changeRole(params.id, body, actor);
   ok(res, toUserDTO(updated), 'Role updated');
 }
 
