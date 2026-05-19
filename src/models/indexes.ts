@@ -99,5 +99,36 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { endDate: 1 }, name: 'endDate_idx' },
   ]);
 
+  // --- §0a: role_requests ---
+  const roleRequests = db.collection(COLLECTIONS.ROLE_REQUESTS);
+  await roleRequests.createIndexes([
+    { key: { userId: 1, status: 1 }, name: 'userId_status' },
+    { key: { status: 1, createdAt: -1 }, name: 'status_recent' },
+    {
+      key: { userId: 1 },
+      name: 'one_pending_per_user',
+      unique: true,
+      partialFilterExpression: { status: 'pending' },
+    },
+  ]);
+
+  // --- §0a: email_otps (TTL via expiresAt) ---
+  const emailOtps = db.collection(COLLECTIONS.EMAIL_OTPS);
+  await emailOtps.createIndexes([
+    {
+      key: { email: 1, purpose: 1, consumed: 1 },
+      name: 'email_purpose_consumed',
+    },
+    { key: { verificationToken: 1 }, name: 'verificationToken_idx', sparse: true },
+    { key: { expiresAt: 1 }, name: 'expiresAt_ttl', expireAfterSeconds: 0 },
+  ]);
+
+  // --- §0a: email_log ---
+  const emailLog = db.collection(COLLECTIONS.EMAIL_LOG);
+  await emailLog.createIndexes([
+    { key: { relatedUserId: 1, sentAt: -1 }, name: 'relatedUserId_recent' },
+    { key: { status: 1, sentAt: -1 }, name: 'status_recent' },
+  ]);
+
   logger.info('MongoDB indexes ensured');
 }
