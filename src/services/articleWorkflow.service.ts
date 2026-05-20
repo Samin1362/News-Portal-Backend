@@ -48,7 +48,15 @@ export async function listQueue(
   query: QueueQuery,
 ): Promise<{ items: WithId<ArticleDoc>[]; page: number; limit: number; total: number }> {
   const { page, limit, skip } = parsePagination(query);
-  const status: ArticleStatus[] = query.status ? [query.status] : ['submitted', 'under_review'];
+  // `status='all'` → no status filter (admin all-articles list).
+  // any single status → that status only.
+  // undefined → editor default of submitted + under_review.
+  const status: ArticleStatus[] | undefined =
+    query.status === 'all'
+      ? undefined
+      : query.status
+      ? [query.status]
+      : ['submitted', 'under_review'];
   const result = await articleModel.listArticles({
     status,
     page,

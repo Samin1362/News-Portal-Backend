@@ -68,9 +68,29 @@ export const listMineQuerySchema = paginationQuerySchema.extend({
 });
 export type ListMineQuery = z.infer<typeof listMineQuerySchema>;
 
+/**
+ * Status filter for `/articles/queue`.
+ *
+ * - One of the 7 `ARTICLE_STATUSES` → that status only.
+ * - `'all'` → every status, no filter (admin-wide list view).
+ * - Omitted → defaults to `['submitted', 'under_review']` in the service
+ *   layer, matching the editor's "needs review" use case.
+ *
+ * Endpoint is gated to editor + admin in routes, so exposing draft/archived
+ * is safe — both roles already have full article visibility.
+ */
 export const queueQuerySchema = paginationQuerySchema.extend({
   status: z
-    .enum(['submitted', 'under_review', 'approved', 'rejected', 'published'])
+    .enum([
+      'draft',
+      'submitted',
+      'under_review',
+      'approved',
+      'rejected',
+      'published',
+      'archived',
+      'all',
+    ])
     .optional(),
 });
 export type QueueQuery = z.infer<typeof queueQuerySchema>;
