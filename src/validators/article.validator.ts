@@ -92,6 +92,17 @@ export const queueQuerySchema = paginationQuerySchema.extend({
       'all',
     ])
     .optional(),
+  // Admin-only filter used by the taxonomy pages to count articles per tag.
+  // Articles store tag slugs (not ObjectIds) so this matches the persisted
+  // shape directly. Validated against the same regex as tag creation.
+  tagSlug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9-]+$/, 'tagSlug must be lowercase letters, digits, and dashes')
+    .min(1)
+    .max(120)
+    .optional(),
 });
 export type QueueQuery = z.infer<typeof queueQuerySchema>;
 

@@ -59,6 +59,7 @@ export async function listQueue(
       : ['submitted', 'under_review'];
   const result = await articleModel.listArticles({
     status,
+    tagSlug: query.tagSlug,
     page,
     limit,
     skip,
