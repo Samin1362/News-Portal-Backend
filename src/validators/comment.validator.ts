@@ -26,8 +26,11 @@ export type ArticleCommentsEnabledBody = z.infer<typeof articleCommentsEnabledBo
 export const listCommentsQuerySchema = paginationQuerySchema;
 export type ListCommentsQuery = z.infer<typeof listCommentsQuerySchema>;
 
+// `'all'` skips the status filter entirely (admin needs to see every status in
+// one view). The service layer treats this literal as "no filter"; mirrors the
+// pattern used by `queueQuerySchema` in article.validator.ts.
 export const listAdminCommentsQuerySchema = paginationQuerySchema.extend({
-  status: z.enum(COMMENT_STATUSES).optional(),
+  status: z.enum([...COMMENT_STATUSES, 'all'] as const).optional(),
   reported: z
     .enum(['true', 'false'])
     .optional()
