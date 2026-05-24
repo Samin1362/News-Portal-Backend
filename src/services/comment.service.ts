@@ -245,8 +245,12 @@ export async function listAdminQueue(
   query: ListAdminCommentsQuery,
 ): Promise<AdminQueueResult> {
   const { page, limit, skip } = parsePagination(query);
+  // `'all'` from the validator means "no status filter" (admin-only view).
+  // Omitted status keeps the legacy default of `'pending'` for the editor queue.
+  const statusFilter =
+    query.status === 'all' ? undefined : (query.status ?? 'pending');
   const result = await commentModel.listComments({
-    status: query.status ?? 'pending',
+    status: statusFilter,
     reportedOnly: query.reported,
     page,
     limit,
