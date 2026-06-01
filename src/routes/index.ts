@@ -15,6 +15,7 @@ import {
 import { adminAdRouter, publicAdRouter } from './ad.routes.js';
 import seoRoutes from './seo.routes.js';
 import roleRequestRoutes from './roleRequest.routes.js';
+import adminRoutes from './admin.routes.js';
 
 const router = Router();
 
@@ -32,6 +33,9 @@ router.use('/articles', articleRoutes);
 
 router.use('/comments', commentRouter);
 router.use('/admin/comments', adminCommentRouter);
+// Admin aggregation surfaces (/admin/analytics, /admin/revenue). Mounted
+// after /admin/comments so that more-specific editor-accessible router wins.
+router.use('/admin', adminRoutes);
 
 router.use('/media', mediaRoutes);
 router.use('/ads', adminAdRouter);
