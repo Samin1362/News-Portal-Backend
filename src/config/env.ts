@@ -67,7 +67,7 @@ if (!parsed.success) {
   const issues = parsed.error.issues
     .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
     .join('\n');
-  // eslint-disable-next-line no-console
+   
   console.error(`Invalid environment configuration:\n${issues}`);
   process.exit(1);
 }
@@ -76,7 +76,7 @@ const data = parsed.data;
 const mongoUri = data.URI ?? data.MONGODB_URI;
 
 if (!mongoUri) {
-  // eslint-disable-next-line no-console
+   
   console.error(
     'Invalid environment configuration:\n  - URI (or MONGODB_URI) is required',
   );
